@@ -1,0 +1,127 @@
+
+# Consolidation of the Colombian 2018 Census
+## Marco Fayet - UNFPA Data Fellow - Latin American & Carribbean Regional Office
+
+
+This piece of code was written to create to consolidate the 2018 Colombian census files. The Colombian National Statistical Office (DANE) is currently hosting the 2018 census results on 132 individual files (4 for each of the 33 departments). These individual files, as well as their reference documentation and metadata, can be accessed and downloaded [here](http://microdatos.dane.gov.co/index.php/catalog/643/get_microdata).
+
+
+In order to merge the files into one single database (using the 'COD_ENCUESTAS' variable as a reference index), one should download the individual department census files and extract the CSV versions in a folder ("path" in the setwd() function), before running the following piece of code:
+
+
+```{r eval=FALSE}
+#clear workspace
+rm(list=ls())
+
+#install.packages('plyr')
+library(plyr)
+#install.packages('tidyverse')
+library(tidyverse)
+
+# sets the working directory
+#setwd("C:/path")
+
+
+# DANE departamento coding equivalencies:
+	# 1: 05= Antioquia
+	# 2: 08= Atlántico
+	# 3: 11= Bogotá
+	# 4: 13= Bolivar
+	# 5: 15= Boyaca
+	# 6: 17=Caldas
+	# 7: 18= Caqueta
+	# 8: 19=Cauca
+	# 9: 20= Cesar
+	# 10: 23= Cordoba
+	# 11: 25=Cundinamarca
+	# 12: 27= Choco
+	# 13: 41= Huila
+	# 14: 44= La guajira
+	# 15: 47= Magdalena
+	# 16: 50= Meta
+	# 17: 52= Nariño
+	# 18: 54= Norte de Santander
+	# 19: 63= Quindio
+	# 20: 66= Risaralda
+	# 21: 68= Santander
+	# 22: 70= Sucre
+	# 23: 73= Tolima
+	# 24: 76= Valle del Cauca
+	# 25: 81= Arauca
+	# 26: 85= Casanare
+	# 27: 86= Putumayo
+	# 28: 88= Archipiélago de San Andrés, Providencia y Santa Catalina
+	# 29: 91= Amazonas
+	# 30: 94= Guainía
+	# 31: 95= Guaviare
+	# 32: 97= Vaupés
+	# 33: 99= Vichada
+
+
+# List of departamentos
+dept_codes <- c(05, 08, 11, 13, 15, 17, 18, 19, 20, 23, 25, 27, 41, 44, 47, 50, 52, 54, 63, 66, 68, 70, 73, 76, 81, 85, 86, 88, 91, 94, 95, 97, 99)
+
+# Each department contains 4 individual census files: 1/ Viviendas, 2/ Hogares, 3/ Fallecidos and 4/ Personas
+
+cat <- c(1,2,3,4)
+
+
+for (i in dept_codes){
+
+	# initiatlizing empty list that will store the 4 individual census files	
+	temp_list <- vector(mode = "list", length = 4)
+
+	# extracting files (DANE nomenclature), assigning to temp_list elements
+	for (j in cat){
+
+		var <- paste0("census_", i, "_", j)
+
+		if (j == 1){
+
+		temp_list[[1]] <- assign(var, read_csv(paste0("CNPV2018_1VIV_A1_", i, ".CSV")))
+		
+		} else if (j == 2){
+
+		temp_list[[2]] <- assign(var, read_csv(paste0("CNPV2018_2HOG_A1_", i, ".CSV")))
+
+		} else if (j == 3){
+
+		temp_list[[3]] <- assign(var, read_csv(paste0("CNPV2018_3FALL_A1_", i, ".CSV")))
+
+		} else if (j == 4){
+
+		temp_list[[4]] <- assign(var, read_csv(paste0("CNPV2018_5PER_A1_", i, ".CSV")))
+
+		} else {
+
+			print("naming error")
+		
+		}
+	}
+
+	
+	# collate the 4 files into one consolidated departmental file; adds extensions for future identification purposes 
+	var2 <- paste0("census_", i)
+
+	assign(var2, full_join(temp_list[[1]], temp_list[[2]], by='COD_ENCUESTAS', suffix = c(".viv", ".hog")) %>%
+		full_join(., temp_list[[3]], by='COD_ENCUESTAS') %>%
+		full_join(., temp_list[[4]], by='COD_ENCUESTAS', suffix = c(".fal", ".pers")))
+
+	# removes temporary files
+	rm(list=(paste0("census_", i, "_", 1)))
+	rm(list=(paste0("census_", i, "_", 2)))
+	rm(list=(paste0("census_", i, "_", 3)))
+	rm(list=(paste0("census_", i, "_", 4)))
+	rm(temp_list)
+
+}
+
+
+# consolidates the department files into one census file
+consolidated_census <- bind_rows(census_5, census_8, census_11, census_13, census_15,
+						          census_17, census_18, census_19, census_20, census_23, census_25,
+        						  census_27, census_41, census_44, census_47, census_50, census_52,
+						          census_54, census_63, census_66, census_68, census_70, census_73,
+						          census_76, census_81, census_85, census_86, census_88, census_91,
+						          census_94,  census_95, census_97, census_99)
+```
