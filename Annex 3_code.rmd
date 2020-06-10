@@ -1,0 +1,1940 @@
+# Subnational Differentials in Death Registration Completeness in Colombia, 2005 – 2018
+## Marco Fayet - UNFPA Data Fellow - Latin America & Carribbean Regional Office
+
+
+This piece of code was written to (i) extract and consolidate census and mortality registry data, (ii) apply a DDM method known as GGB-SEG hybrid to resulting dataframe and (iii) visually assess  data quality and plot DDM outputs.   
+
+
+```{r eval=FALSE}
+
+rm(list=ls())
+library(tidyverse)
+library(foreign)
+library(DDM)
+library(SubnationalCRVS)
+library(DemoTools)
+library(ipumsr)
+library(knitr)
+library(readxl)
+
+# set working directory
+setwd("C:/.../")
+
+#### labeling info
+
+
+	# sex labels
+	# 1 = masc, 2 = fem, 3 = indeterminado
+
+
+	# departments nomenclature equivalence
+
+	# cod_dpto : Departamento donde ocurrió la defunción
+	# 1: 05= Antioquia
+	# 2: 08= Atlántico
+	# 3: 11= Bogotá
+	# 4: 13= Bolivar
+	# 5: 15= Boyaca
+	# 6: 17=Caldas
+	# 7: 18= Caqueta
+	# 8: 19=Cauca
+	# 9: 20= Cesar
+	# 10: 23= Cordoba
+	# 11: 25=Cundinamarca
+	# 12: 27= Choco
+	# 13: 41= Huila
+	# 14: 44= La guajira
+	# 15: 47= Magdalena
+	# 16: 50= Meta
+	# 17: 52= Nariño
+	# 18: 54= Norte de Santander
+	# 19: 63= Quindio
+	# 20: 66= Risaralda
+	# 21: 68= Santander
+	# 22: 70= Sucre
+	# 23: 73= Tolima
+	# 24: 76= Valle del Cauca
+	# 25: 81= Arauca
+	# 26: 85= Casanare
+	# 27: 86= Putumayo
+	# 28: 88= Archipiélago de San Andrés, Providencia y Santa Catalina
+	# 29: 91= Amazonas
+	# 30: 94= Guainía
+	# 31: 95= Guaviare
+	# 32: 97= Vaupés
+	# 33: 99= Vichada
+	# NA: 01= Sin información
+
+	
+	# age groups:
+	
+	# gru_ed1 : Agrupación de edades, quinquenales según la edad del fallecido
+	# 01 = Menores de 1 día
+	# 02 = De 1 a 6 días
+	# 03 = De 7 a 27 días
+	# 04 = De 28 a 29 días
+	# 05 = De 1 a 5 meses
+	# 06 = De 6 a 11 meses
+	# 07 = De un año
+	# 08 = De 2 a 4 años
+	# --
+	# 09 = De 5 a 9 años
+	# 10 = De 10 a 14 años
+	# 11 = De 15 a 19 años
+	# 12 = De 20 a 24 años
+	# 13 = De 25 a 29 años
+	# 14 = De 30 a 34 años
+	# 15 = De 35 a 99 años
+	# 16 = De 40 a 44 años
+	# 17 = de 45 a 49 años
+	# 18 = de 50 a 54 años
+	# 19 = de 55 a 59 años
+	# 20 = de 60 a 64 años
+	# 21 = de 65 a 69 años
+	# 22 = de 70 a74 años
+	# 23 = de 75 a 79 años
+	# 24 = De 80 a 84 años
+	# --
+	# 25 = De 85 y más
+	# --
+	# 26 = Edad desconocida.
+
+	# Census 2018 PERS files - P_EDAD variable
+	# 1	de 00 A 04 Años
+	# 2	de 05 A 09 Años
+	# 3	de 10 A 14 Años
+	# 4	de 15 A 19 Años
+	# 5	de 20 A 24 Años
+	# 6	de 25 A 29 Años
+	# 7	de 30 A 34 Años
+	# 8	de 35 A 39 Años
+	# 9	de 40 A 44 Años
+	# 10	de 45 A 49 Años
+	# 11	de 50 A 54 Años
+	# 12	de 55 A 59 Años
+	# 13	de 60 A 64 Años
+	# 14	de 65 A 69 Años
+	# 15	de 70 A 74 Años
+	# 16	de 75 A 79 Años
+	# 17	de 80 A 84 Años
+	# 18	de 85 A 89 Años
+	# 19	de 90 A 94 Años
+	# 20	de 95 A 99 Años
+	# 21	de 100 y más Años
+
+
+#### create main ddm dataframe and initialize variables [valid for 2005 to 2007 (inclusive) files]
+
+	# dept list
+	dept_codes1 <- 1:33
+	dept_codes2 <- c(05, 08, 11, 13, 15, 17, 18, 19, 20, 23, 25, 27, 41, 44, 47, 50, 52, 54, 63, 66, 68, 70, 73, 76, 81, 85, 86, 88, 91, 94, 95, 97, 99)
+	dept_codes2_ipums <- c(05, 08, 11, 13, 15, 17, 18, 19, 20, 23, 25, 27, 41, 44, 47, 50, 52, 54, 63, 66, 68, 70, 73, 76, 81, 85, 86, 88, 95)
+	dept_codes2_2018_census <- c("05", "08", 11, 13, 15, 17, 18, 19, 20, 23, 25, 27, 41, 44, 47, 50, 52, 54, 63, 66, 68, 70, 73, 76, 81, 85, 86, 88, 91, 94, 95, 97, 99)
+	dept_names <- c("Antioquia", "Atlantico", "Bogota", "Bolivar", "Boyaca", "Caldas", "Caqueta", "Cauca", "Cesar", "Cordoba", "Cundinamarca", "Choco", "Huila", "La Guajira", "Magdalena", "Meta", "Narino", "Norte de Santander", "Quindio", "Risaralda", "Santander", "Sucre", "Tolima", "Valle del Cauca", "Arauca", "Casanare", "Putumayo", "San Andres", "Amazonas", "Guainia", "Guaviare", "Vaupes", "Vichada")
+	stopifnot(length(dept_codes1) == length(dept_names) | length(dept_codes2) == length(dept_names))
+
+
+	# number of 5 year age categories (0 to 85+ = 18)
+	age_cats <- seq(from=0, to=80, by=5)
+	n_age_cats <- length(age_cats)
+	
+	# number of sex categories
+	n_sex <- 2
+	sex_labels <- c("m", "f")
+
+	# number of columns
+	n_col <- 10
+
+	# census dates
+	date1 <- "2005-05-22"
+	date2 <- "2018-01-18"
+
+	# building the dataframe
+	df_for_ddm <- as.data.frame(matrix(NA,
+									   nrow = n_sex * n_age_cats * length(dept_names),
+									   ncol = n_col))
+
+ 	colnames(df_for_ddm) <- c("dept_code1", "dept_code2", "dept_name", "sex", "age", "pop1", "pop2", "deaths", "date1", "date2")
+
+ 	# populating departments, sex labels, age categories, census dates
+	df_for_ddm$dept_code1 <- rep(dept_codes1, each = n_sex * n_age_cats)
+	df_for_ddm$dept_code2 <- rep(dept_codes2, each = n_sex * n_age_cats)
+	df_for_ddm$dept_name <- rep(dept_names, each = n_sex * n_age_cats)
+	df_for_ddm$sex <- rep(rep(sex_labels, each = n_age_cats), length(dept_names))
+	df_for_ddm$age <- rep(age_cats, n_sex * length(dept_names))
+	df_for_ddm$date1 <- date1
+	df_for_ddm$date2 <- date2
+
+
+
+
+############################################
+#### MORTALITY REGISTRY DATA EXTRACTION ####
+############################################
+
+
+######################
+### ---- 2005 ---- ###
+######################
+
+	deaths_2005 <- read.spss("deaths/microdata/Defun_2005.sav", to.data.frame=TRUE)
+	deaths_2005$cod_dpto <- as.numeric(deaths_2005$cod_dpto) 
+	deaths_2005$gru_ed1 <- as.numeric(deaths_2005$gru_ed1)
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2005 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=3+n_age_cats))
+
+	# name the columns and fill the department codes depending on which set (1 or 2)
+	if (all(sort(unique(deaths_2005$cod_dpto)) == dept_codes1)) {
+		colnames(dept_deaths_2005) <- c("dept_code", "dept_name", "sex", age_cats)
+		dept_deaths_2005$dept_code <- rep(dept_codes1, each = n_sex)
+		dept_codes <- dept_codes1
+
+		} else if (all(sort(unique(deaths_2005$cod_dpto)) == dept_codes2)) {
+		colnames(dept_deaths_2005) <- c("dept_code2", "dept_name", "sex", age_cats)
+		dept_deaths_2005$dept_code2 <- rep(dept_codes2, each = n_sex)
+		dept_codes <- dept_codes2
+
+		}	else {print("dept codes do not match")}
+
+	# fill the department names and genders
+	dept_deaths_2005$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2005$sex <- rep(sex_labels, length(dept_names))
+
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+	for (i in dept_codes) {
+
+		table_sex_age_2005 <- with(deaths_2005[deaths_2005$cod_dpto == i, ], table(sexo, factor(gru_ed1, levels = 1:26)))
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2005[1, c(1,2,3,4,5,6,7,8)]))
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2005[2, c(1,2,3,4,5,6,7,8)]))
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "5"] <- as.numeric(table_sex_age_2005[1, 9])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "5"] <- as.numeric(table_sex_age_2005[2, 9])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "10"] <- as.numeric(table_sex_age_2005[1, 10])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "10"] <- as.numeric(table_sex_age_2005[2, 10])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "15"] <- as.numeric(table_sex_age_2005[1, 11])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "15"] <- as.numeric(table_sex_age_2005[2, 11])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "20"] <- as.numeric(table_sex_age_2005[1, 12])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "20"] <- as.numeric(table_sex_age_2005[2, 12])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "25"] <- as.numeric(table_sex_age_2005[1, 13])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "25"] <- as.numeric(table_sex_age_2005[2, 13])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "30"] <- as.numeric(table_sex_age_2005[1, 14])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "30"] <- as.numeric(table_sex_age_2005[2, 14])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "35"] <- as.numeric(table_sex_age_2005[1, 15])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "35"] <- as.numeric(table_sex_age_2005[2, 15])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "40"] <- as.numeric(table_sex_age_2005[1, 16])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "40"] <- as.numeric(table_sex_age_2005[2, 16])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "45"] <- as.numeric(table_sex_age_2005[1, 17])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "45"] <- as.numeric(table_sex_age_2005[2, 17])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "50"] <- as.numeric(table_sex_age_2005[1, 18])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "50"] <- as.numeric(table_sex_age_2005[2, 18])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "55"] <- as.numeric(table_sex_age_2005[1, 19])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "55"] <- as.numeric(table_sex_age_2005[2, 19])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "60"] <- as.numeric(table_sex_age_2005[1, 20])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "60"] <- as.numeric(table_sex_age_2005[2, 20])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "65"] <- as.numeric(table_sex_age_2005[1, 21])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "65"] <- as.numeric(table_sex_age_2005[2, 21])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "70"] <- as.numeric(table_sex_age_2005[1, 22])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "70"] <- as.numeric(table_sex_age_2005[2, 22])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "75"] <- as.numeric(table_sex_age_2005[1, 23])
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "75"] <- as.numeric(table_sex_age_2005[2, 23])
+
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2005[1, c(24,25)]))
+		dept_deaths_2005[dept_deaths_2005$dept_code == i & dept_deaths_2005$sex  == "f", "80"] <- sum(as.numeric(table_sex_age_2005[2, c(24,25)]))
+
+	}
+
+
+
+
+######################
+### ---- 2006 ---- ###
+######################
+
+
+	deaths_2006 <- read.spss("deaths/microdata/Defun_2006.sav", to.data.frame=TRUE)
+
+	deaths_2006$cod_dpto <- as.numeric(deaths_2006$cod_dpto) 
+	deaths_2006$gru_ed1 <- as.numeric(deaths_2006$gru_ed1)
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2006 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=3+n_age_cats))
+
+	# name the columns and fill the department codes depending on which set (1 or 2)
+
+	if (all(sort(unique(deaths_2006$cod_dpto)) == dept_codes1)) {
+		colnames(dept_deaths_2006) <- c("dept_code", "dept_name", "sex", age_cats)
+		dept_deaths_2006$dept_code <- rep(dept_codes1, each = n_sex)
+		dept_codes <- dept_codes1
+
+		} else if (all(sort(unique(deaths_2006$cod_dpto)) == dept_codes2)) {
+		colnames(dept_deaths_2006) <- c("dept_code2", "dept_name", "sex", age_cats)
+		dept_deaths_2006$dept_code2 <- rep(dept_codes2, each = n_sex)
+		dept_codes <- dept_codes2
+
+		}	else {print("dept codes do not match")}
+
+	# fill the department names and genders
+	dept_deaths_2006$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2006$sex <- rep(sex_labels, length(dept_names))
+
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+
+	for (i in dept_codes) {
+
+		table_sex_age_2006 <- with(deaths_2006[deaths_2006$cod_dpto == i, ], table(sexo, factor(gru_ed1, levels = 1:26)))
+
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2006[1, c(1,2,3,4,5,6,7,8)]))
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2006[2, c(1,2,3,4,5,6,7,8)]))
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "5"] <- as.numeric(table_sex_age_2006[1, 9])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "5"] <-  as.numeric(table_sex_age_2006[2, 9])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "10"] <- as.numeric(table_sex_age_2006[1, 10])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "10"] <-  as.numeric(table_sex_age_2006[2, 10])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "15"] <- as.numeric(table_sex_age_2006[1, 11])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "15"] <-  as.numeric(table_sex_age_2006[2, 11])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "20"] <- as.numeric(table_sex_age_2006[1, 12])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "20"] <-  as.numeric(table_sex_age_2006[2, 12])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "25"] <- as.numeric(table_sex_age_2006[1, 13])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "25"] <-  as.numeric(table_sex_age_2006[2, 13])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "30"] <- as.numeric(table_sex_age_2006[1, 14])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "30"] <-  as.numeric(table_sex_age_2006[2, 14])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "35"] <- as.numeric(table_sex_age_2006[1, 15])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "35"] <-  as.numeric(table_sex_age_2006[2, 15])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "40"] <- as.numeric(table_sex_age_2006[1, 16])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "40"] <-  as.numeric(table_sex_age_2006[2, 16])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "45"] <- as.numeric(table_sex_age_2006[1, 17])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "45"] <-  as.numeric(table_sex_age_2006[2, 17])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "50"] <- as.numeric(table_sex_age_2006[1, 18])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "50"] <-  as.numeric(table_sex_age_2006[2, 18])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "55"] <- as.numeric(table_sex_age_2006[1, 19])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "55"] <-  as.numeric(table_sex_age_2006[2, 19])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "60"] <- as.numeric(table_sex_age_2006[1, 20])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "60"] <-  as.numeric(table_sex_age_2006[2, 20])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "65"] <- as.numeric(table_sex_age_2006[1, 21])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "65"] <-  as.numeric(table_sex_age_2006[2, 21])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "70"] <- as.numeric(table_sex_age_2006[1, 22])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "70"] <-  as.numeric(table_sex_age_2006[2, 22])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "75"] <- as.numeric(table_sex_age_2006[1, 23])
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "75"] <-  as.numeric(table_sex_age_2006[2, 23])
+
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2006[1, c(24,25)]))
+		dept_deaths_2006[dept_deaths_2006$dept_code == i & dept_deaths_2006$sex  == "f", "80"] <- sum(as.numeric(table_sex_age_2006[1, c(24,25)]))
+
+	}
+
+
+
+
+######################
+### ---- 2007 ---- ###
+######################
+
+
+	deaths_2007 <- read.spss("deaths/microdata/Defun_2007.sav", to.data.frame=TRUE)
+
+	deaths_2007$cod_dpto <- as.numeric(deaths_2007$cod_dpto) 
+	deaths_2007$gru_ed1 <- as.numeric(deaths_2007$gru_ed1)
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2007 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=3+n_age_cats))
+
+	# name the columns and fill the department codes depending on which set (1 or 2)
+	if (all(sort(unique(deaths_2007$cod_dpto)) == dept_codes1)) {
+		colnames(dept_deaths_2007) <- c("dept_code", "dept_name", "sex", age_cats)
+		dept_deaths_2007$dept_code <- rep(dept_codes1, each = n_sex)
+		dept_codes <- dept_codes1
+
+		} else if (all(sort(unique(deaths_2007$cod_dpto)) == dept_codes2)) {
+		colnames(dept_deaths_2007) <- c("dept_code2", "dept_name", "sex", age_cats)
+		dept_deaths_2007$dept_code2 <- rep(dept_codes2, each = n_sex)
+		dept_codes <- dept_codes2
+
+		}	else {print("dept codes do not match")}
+
+	# fill the department names and genders
+	dept_deaths_2007$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2007$sex <- rep(sex_labels, length(dept_names))
+
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+	for (i in dept_codes) {
+
+		table_sex_age_2007 <- with(deaths_2007[deaths_2007$cod_dpto == i, ], table(sexo, factor(gru_ed1, levels = 1:26)))
+
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2007[1, c(1,2,3,4,5,6,7,8)]))
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2007[2, c(1,2,3,4,5,6,7,8)]))
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "5"] <- as.numeric(table_sex_age_2007[1, 9])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "5"] <-  as.numeric(table_sex_age_2007[2, 9])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "10"] <- as.numeric(table_sex_age_2007[1, 10])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "10"] <-  as.numeric(table_sex_age_2007[2, 10])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "15"] <- as.numeric(table_sex_age_2007[1, 11])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "15"] <-  as.numeric(table_sex_age_2007[2, 11])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "20"] <- as.numeric(table_sex_age_2007[1, 12])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "20"] <-  as.numeric(table_sex_age_2007[2, 12])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "25"] <- as.numeric(table_sex_age_2007[1, 13])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "25"] <-  as.numeric(table_sex_age_2007[2, 13])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "30"] <- as.numeric(table_sex_age_2007[1, 14])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "30"] <-  as.numeric(table_sex_age_2007[2, 14])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "35"] <- as.numeric(table_sex_age_2007[1, 15])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "35"] <-  as.numeric(table_sex_age_2007[2, 15])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "40"] <- as.numeric(table_sex_age_2007[1, 16])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "40"] <-  as.numeric(table_sex_age_2007[2, 16])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "45"] <- as.numeric(table_sex_age_2007[1, 17])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "45"] <-  as.numeric(table_sex_age_2007[2, 17])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "50"] <- as.numeric(table_sex_age_2007[1, 18])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "50"] <-  as.numeric(table_sex_age_2007[2, 18])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "55"] <- as.numeric(table_sex_age_2007[1, 19])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "55"] <-  as.numeric(table_sex_age_2007[2, 19])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "60"] <- as.numeric(table_sex_age_2007[1, 20])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "60"] <-  as.numeric(table_sex_age_2007[2, 20])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "65"] <- as.numeric(table_sex_age_2007[1, 21])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "65"] <-  as.numeric(table_sex_age_2007[2, 21])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "70"] <- as.numeric(table_sex_age_2007[1, 22])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "70"] <-  as.numeric(table_sex_age_2007[2, 22])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "75"] <- as.numeric(table_sex_age_2007[1, 23])
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "75"] <-  as.numeric(table_sex_age_2007[2, 23])
+
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2007[1, c(24,25)]))
+		dept_deaths_2007[dept_deaths_2007$dept_code == i & dept_deaths_2007$sex  == "f", "80"] <- sum(as.numeric(table_sex_age_2007[2, c(24,25)]))
+
+	}
+
+
+
+
+######################
+### ---- 2008 ---- ###
+######################
+
+
+	deaths_2008 <- read.spss("deaths/microdata/Defun_2008.sav", to.data.frame=TRUE)
+
+
+	# Renaming (removing accents etc) to match the dept_names list (check with: )
+	# dept_names == as.character(sort(unique(deaths_2008$COD_DPTO)))
+	levels(deaths_2008$COD_DPTO)[2] <- 'Atlantico'
+	levels(deaths_2008$COD_DPTO)[3] <- 'Bogota'
+	levels(deaths_2008$COD_DPTO)[4] <- 'Bolivar'
+	levels(deaths_2008$COD_DPTO)[5] <- 'Boyaca'
+	levels(deaths_2008$COD_DPTO)[9] <- 'Cesar'
+	levels(deaths_2008$COD_DPTO)[10] <- 'Cordoba'
+	levels(deaths_2008$COD_DPTO)[12] <- 'Choco'
+	levels(deaths_2008$COD_DPTO)[13] <- 'Huila'
+	levels(deaths_2008$COD_DPTO)[14] <- 'La Guajira'
+	levels(deaths_2008$COD_DPTO)[15] <- 'Magdalena'
+	levels(deaths_2008$COD_DPTO)[16] <- 'Meta'
+	levels(deaths_2008$COD_DPTO)[17] <- 'Narino'
+	levels(deaths_2008$COD_DPTO)[18] <- 'Norte de Santander'
+	levels(deaths_2008$COD_DPTO)[20] <- 'Risaralda'
+	levels(deaths_2008$COD_DPTO)[21] <- 'Santander'
+	levels(deaths_2008$COD_DPTO)[22] <- 'Sucre'
+	levels(deaths_2008$COD_DPTO)[23] <- 'Tolima'
+	levels(deaths_2008$COD_DPTO)[24] <- 'Valle del Cauca'
+	levels(deaths_2008$COD_DPTO)[25] <- 'Arauca'
+	levels(deaths_2008$COD_DPTO)[27] <- 'Putumayo'
+	levels(deaths_2008$COD_DPTO)[28] <- 'San Andres'
+	levels(deaths_2008$COD_DPTO)[29] <- 'Amazonas'
+	levels(deaths_2008$COD_DPTO)[30] <- 'Guainia'
+	levels(deaths_2008$COD_DPTO)[32] <- 'Vaupes'
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2008 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=2+n_age_cats))
+
+	# name the columns and fill the department names and gender
+	colnames(dept_deaths_2008) <- c("dept_name", "sex", age_cats)
+
+	dept_deaths_2008$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2008$sex <- rep(sex_labels, length(dept_names))
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+	for (i in dept_names) {
+
+		table_sex_age_2008 <- with(deaths_2008[deaths_2008$COD_DPTO == i, ], table(SEXO, factor(GRU_ED1, levels = levels(deaths_2008$GRU_ED1))))
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2008[1, c(1,2,3,4,5,6,7,8,9)]))
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2008[1, c(1,2,3,4,5,6,7,8,9)]))
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "5"] <- as.numeric(table_sex_age_2008[1, 10])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "5"] <-  as.numeric(table_sex_age_2008[2, 10])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "10"] <- as.numeric(table_sex_age_2008[1, 11])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "10"] <-  as.numeric(table_sex_age_2008[2, 11])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "15"] <- as.numeric(table_sex_age_2008[1, 12])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "15"] <-  as.numeric(table_sex_age_2008[2, 12])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "20"] <- as.numeric(table_sex_age_2008[1, 13])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "20"] <-  as.numeric(table_sex_age_2008[2, 13])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "25"] <- as.numeric(table_sex_age_2008[1, 14])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "25"] <-  as.numeric(table_sex_age_2008[2, 14])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "30"] <- as.numeric(table_sex_age_2008[1, 15])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "30"] <-  as.numeric(table_sex_age_2008[2, 15])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "35"] <- as.numeric(table_sex_age_2008[1, 16])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "35"] <-  as.numeric(table_sex_age_2008[2, 16])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "40"] <- as.numeric(table_sex_age_2008[1, 17])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "40"] <-  as.numeric(table_sex_age_2008[2, 17])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "45"] <- as.numeric(table_sex_age_2008[1, 18])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "45"] <-  as.numeric(table_sex_age_2008[2, 18])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "50"] <- as.numeric(table_sex_age_2008[1, 19])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "50"] <-  as.numeric(table_sex_age_2008[2, 19])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "55"] <- as.numeric(table_sex_age_2008[1, 20])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "55"] <-  as.numeric(table_sex_age_2008[2, 20])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "60"] <- as.numeric(table_sex_age_2008[1, 21])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "60"] <-  as.numeric(table_sex_age_2008[2, 21])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "65"] <- as.numeric(table_sex_age_2008[1, 22])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "65"] <-  as.numeric(table_sex_age_2008[2, 22])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "70"] <- as.numeric(table_sex_age_2008[1, 23])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "70"] <-  as.numeric(table_sex_age_2008[2, 23])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "75"] <- as.numeric(table_sex_age_2008[1, 24])
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "75"] <-  as.numeric(table_sex_age_2008[2, 24])
+
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2008[1, c(25,26,27,28,29)]))
+		dept_deaths_2008[dept_deaths_2008$dept_name == i & dept_deaths_2008$sex  == "f", "80"] <-  sum(as.numeric(table_sex_age_2008[2, c(25,26,27,28,29)]))		
+
+
+	}
+
+
+
+
+######################
+### ---- 2009 ---- ###
+######################
+
+
+	deaths_2009 <- read.spss("deaths/microdata/Defun_2009.sav", to.data.frame=TRUE)
+
+
+	# Renaming (removing accents etc) to match the dept_names list (check with: )
+	# dept_names == as.character(sort(unique(deaths_2009$COD_DPTO)))
+	levels(deaths_2009$COD_DPTO)[2] <- 'Atlantico'
+	levels(deaths_2009$COD_DPTO)[3] <- 'Bogota'
+	levels(deaths_2009$COD_DPTO)[4] <- 'Bolivar'
+	levels(deaths_2009$COD_DPTO)[5] <- 'Boyaca'
+	levels(deaths_2009$COD_DPTO)[9] <- 'Cesar'
+	levels(deaths_2009$COD_DPTO)[10] <- 'Cordoba'
+	levels(deaths_2009$COD_DPTO)[12] <- 'Choco'
+	levels(deaths_2009$COD_DPTO)[13] <- 'Huila'
+	levels(deaths_2009$COD_DPTO)[14] <- 'La Guajira'
+	levels(deaths_2009$COD_DPTO)[15] <- 'Magdalena'
+	levels(deaths_2009$COD_DPTO)[16] <- 'Meta'
+	levels(deaths_2009$COD_DPTO)[17] <- 'Narino'
+	levels(deaths_2009$COD_DPTO)[18] <- 'Norte de Santander'
+	levels(deaths_2009$COD_DPTO)[20] <- 'Risaralda'
+	levels(deaths_2009$COD_DPTO)[21] <- 'Santander'
+	levels(deaths_2009$COD_DPTO)[22] <- 'Sucre'
+	levels(deaths_2009$COD_DPTO)[23] <- 'Tolima'
+	levels(deaths_2009$COD_DPTO)[24] <- 'Valle del Cauca'
+	levels(deaths_2009$COD_DPTO)[25] <- 'Arauca'
+	levels(deaths_2009$COD_DPTO)[27] <- 'Putumayo'
+	levels(deaths_2009$COD_DPTO)[28] <- 'San Andres'
+	levels(deaths_2009$COD_DPTO)[29] <- 'Amazonas'
+	levels(deaths_2009$COD_DPTO)[30] <- 'Guainia'
+	levels(deaths_2009$COD_DPTO)[32] <- 'Vaupes'
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2009 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=2+n_age_cats))
+
+	# name the columns and fill the department names and gender
+	colnames(dept_deaths_2009) <- c("dept_name", "sex", age_cats)
+
+	dept_deaths_2009$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2009$sex <- rep(sex_labels, length(dept_names))
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+	for (i in dept_names) {
+
+		table_sex_age_2009 <- with(deaths_2009[deaths_2009$COD_DPTO == i, ], table(SEXO, factor(GRU_ED1, levels = levels(deaths_2009$GRU_ED1))))
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2009[1, c(1,2,3,4,5,6,7,8,9)]))
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2009[1, c(1,2,3,4,5,6,7,8,9)]))
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "5"] <- as.numeric(table_sex_age_2009[1, 10])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "5"] <-  as.numeric(table_sex_age_2009[2, 10])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "10"] <- as.numeric(table_sex_age_2009[1, 11])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "10"] <-  as.numeric(table_sex_age_2009[2, 11])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "15"] <- as.numeric(table_sex_age_2009[1, 12])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "15"] <-  as.numeric(table_sex_age_2009[2, 12])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "20"] <- as.numeric(table_sex_age_2009[1, 13])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "20"] <-  as.numeric(table_sex_age_2009[2, 13])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "25"] <- as.numeric(table_sex_age_2009[1, 14])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "25"] <-  as.numeric(table_sex_age_2009[2, 14])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "30"] <- as.numeric(table_sex_age_2009[1, 15])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "30"] <-  as.numeric(table_sex_age_2009[2, 15])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "35"] <- as.numeric(table_sex_age_2009[1, 16])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "35"] <-  as.numeric(table_sex_age_2009[2, 16])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "40"] <- as.numeric(table_sex_age_2009[1, 17])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "40"] <-  as.numeric(table_sex_age_2009[2, 17])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "45"] <- as.numeric(table_sex_age_2009[1, 18])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "45"] <-  as.numeric(table_sex_age_2009[2, 18])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "50"] <- as.numeric(table_sex_age_2009[1, 19])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "50"] <-  as.numeric(table_sex_age_2009[2, 19])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "55"] <- as.numeric(table_sex_age_2009[1, 20])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "55"] <-  as.numeric(table_sex_age_2009[2, 20])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "60"] <- as.numeric(table_sex_age_2009[1, 21])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "60"] <-  as.numeric(table_sex_age_2009[2, 21])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "65"] <- as.numeric(table_sex_age_2009[1, 22])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "65"] <-  as.numeric(table_sex_age_2009[2, 22])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "70"] <- as.numeric(table_sex_age_2009[1, 23])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "70"] <-  as.numeric(table_sex_age_2009[2, 23])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "75"] <- as.numeric(table_sex_age_2009[1, 24])
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "75"] <-  as.numeric(table_sex_age_2009[2, 24])
+
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2009[1, c(25, 26,27,28,29)]))
+		dept_deaths_2009[dept_deaths_2009$dept_name == i & dept_deaths_2009$sex  == "f", "80"] <-  sum(as.numeric(table_sex_age_2009[2, c(25, 26,27,28,29)]))		
+
+
+	}
+
+
+
+
+######################
+### ---- 2010 ---- ###
+######################
+
+
+	deaths_2010 <- read.spss("deaths/microdata/Defun_2010.sav", to.data.frame=TRUE)
+
+
+	# Renaming (removing accents etc) to match the dept_names list (check with: )
+	# dept_names == as.character(sort(unique(deaths_2010$COD_DPTO)))
+	levels(deaths_2010$COD_DPTO)[2] <- 'Atlantico'
+	levels(deaths_2010$COD_DPTO)[3] <- 'Bogota'
+	levels(deaths_2010$COD_DPTO)[4] <- 'Bolivar'
+	levels(deaths_2010$COD_DPTO)[5] <- 'Boyaca'
+	levels(deaths_2010$COD_DPTO)[9] <- 'Cesar'
+	levels(deaths_2010$COD_DPTO)[10] <- 'Cordoba'
+	levels(deaths_2010$COD_DPTO)[12] <- 'Choco'
+	levels(deaths_2010$COD_DPTO)[13] <- 'Huila'
+	levels(deaths_2010$COD_DPTO)[14] <- 'La Guajira'
+	levels(deaths_2010$COD_DPTO)[15] <- 'Magdalena'
+	levels(deaths_2010$COD_DPTO)[16] <- 'Meta'
+	levels(deaths_2010$COD_DPTO)[17] <- 'Narino'
+	levels(deaths_2010$COD_DPTO)[18] <- 'Norte de Santander'
+	levels(deaths_2010$COD_DPTO)[20] <- 'Risaralda'
+	levels(deaths_2010$COD_DPTO)[21] <- 'Santander'
+	levels(deaths_2010$COD_DPTO)[22] <- 'Sucre'
+	levels(deaths_2010$COD_DPTO)[23] <- 'Tolima'
+	levels(deaths_2010$COD_DPTO)[24] <- 'Valle del Cauca'
+	levels(deaths_2010$COD_DPTO)[25] <- 'Arauca'
+	levels(deaths_2010$COD_DPTO)[27] <- 'Putumayo'
+	levels(deaths_2010$COD_DPTO)[28] <- 'San Andres'
+	levels(deaths_2010$COD_DPTO)[29] <- 'Amazonas'
+	levels(deaths_2010$COD_DPTO)[30] <- 'Guainia'
+	levels(deaths_2010$COD_DPTO)[32] <- 'Vaupes'
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2010 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=2+n_age_cats))
+
+	# name the columns and fill the department names and gender
+	colnames(dept_deaths_2010) <- c("dept_name", "sex", age_cats)
+
+	dept_deaths_2010$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2010$sex <- rep(sex_labels, length(dept_names))
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+	for (i in dept_names) {
+
+		table_sex_age_2010 <- with(deaths_2010[deaths_2010$COD_DPTO == i, ], table(SEXO, factor(GRU_ED1, levels = levels(deaths_2010$GRU_ED1))))
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2010[1, c(1,2,3,4,5,6,7,8,9)]))
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2010[1, c(1,2,3,4,5,6,7,8,9)]))
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "5"] <- as.numeric(table_sex_age_2010[1, 10])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "5"] <-  as.numeric(table_sex_age_2010[2, 10])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "10"] <- as.numeric(table_sex_age_2010[1, 11])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "10"] <-  as.numeric(table_sex_age_2010[2, 11])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "15"] <- as.numeric(table_sex_age_2010[1, 12])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "15"] <-  as.numeric(table_sex_age_2010[2, 12])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "20"] <- as.numeric(table_sex_age_2010[1, 13])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "20"] <-  as.numeric(table_sex_age_2010[2, 13])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "25"] <- as.numeric(table_sex_age_2010[1, 14])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "25"] <-  as.numeric(table_sex_age_2010[2, 14])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "30"] <- as.numeric(table_sex_age_2010[1, 15])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "30"] <-  as.numeric(table_sex_age_2010[2, 15])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "35"] <- as.numeric(table_sex_age_2010[1, 16])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "35"] <-  as.numeric(table_sex_age_2010[2, 16])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "40"] <- as.numeric(table_sex_age_2010[1, 17])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "40"] <-  as.numeric(table_sex_age_2010[2, 17])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "45"] <- as.numeric(table_sex_age_2010[1, 18])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "45"] <-  as.numeric(table_sex_age_2010[2, 18])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "50"] <- as.numeric(table_sex_age_2010[1, 19])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "50"] <-  as.numeric(table_sex_age_2010[2, 19])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "55"] <- as.numeric(table_sex_age_2010[1, 20])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "55"] <-  as.numeric(table_sex_age_2010[2, 20])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "60"] <- as.numeric(table_sex_age_2010[1, 21])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "60"] <-  as.numeric(table_sex_age_2010[2, 21])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "65"] <- as.numeric(table_sex_age_2010[1, 22])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "65"] <-  as.numeric(table_sex_age_2010[2, 22])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "70"] <- as.numeric(table_sex_age_2010[1, 23])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "70"] <-  as.numeric(table_sex_age_2010[2, 23])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "75"] <- as.numeric(table_sex_age_2010[1, 24])
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "75"] <-  as.numeric(table_sex_age_2010[2, 24])
+
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2010[1, c(25, 26,27,28,29)]))
+		dept_deaths_2010[dept_deaths_2010$dept_name == i & dept_deaths_2010$sex  == "f", "80"] <-  sum(as.numeric(table_sex_age_2010[2, c(25, 26,27,28,29)]))		
+
+
+	}
+
+
+
+
+######################
+### ---- 2011 ---- ###
+######################
+
+
+	deaths_2011 <- read.spss("deaths/microdata/Defun_2011.sav", to.data.frame=TRUE)
+
+
+	# Renaming (removing accents etc) to match the dept_names list (check with: )
+	# dept_names == as.character(sort(unique(deaths_2011$COD_DPTO)))
+	levels(deaths_2011$COD_DPTO)[2] <- 'Atlantico'
+	levels(deaths_2011$COD_DPTO)[3] <- 'Bogota'
+	levels(deaths_2011$COD_DPTO)[4] <- 'Bolivar'
+	levels(deaths_2011$COD_DPTO)[5] <- 'Boyaca'
+	levels(deaths_2011$COD_DPTO)[9] <- 'Cesar'
+	levels(deaths_2011$COD_DPTO)[10] <- 'Cordoba'
+	levels(deaths_2011$COD_DPTO)[12] <- 'Choco'
+	levels(deaths_2011$COD_DPTO)[13] <- 'Huila'
+	levels(deaths_2011$COD_DPTO)[14] <- 'La Guajira'
+	levels(deaths_2011$COD_DPTO)[15] <- 'Magdalena'
+	levels(deaths_2011$COD_DPTO)[16] <- 'Meta'
+	levels(deaths_2011$COD_DPTO)[17] <- 'Narino'
+	levels(deaths_2011$COD_DPTO)[18] <- 'Norte de Santander'
+	levels(deaths_2011$COD_DPTO)[20] <- 'Risaralda'
+	levels(deaths_2011$COD_DPTO)[21] <- 'Santander'
+	levels(deaths_2011$COD_DPTO)[22] <- 'Sucre'
+	levels(deaths_2011$COD_DPTO)[23] <- 'Tolima'
+	levels(deaths_2011$COD_DPTO)[24] <- 'Valle del Cauca'
+	levels(deaths_2011$COD_DPTO)[25] <- 'Arauca'
+	levels(deaths_2011$COD_DPTO)[27] <- 'Putumayo'
+	levels(deaths_2011$COD_DPTO)[28] <- 'San Andres'
+	levels(deaths_2011$COD_DPTO)[29] <- 'Amazonas'
+	levels(deaths_2011$COD_DPTO)[30] <- 'Guainia'
+	levels(deaths_2011$COD_DPTO)[32] <- 'Vaupes'
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2011 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=2+n_age_cats))
+
+	# name the columns and fill the department names and gender
+	colnames(dept_deaths_2011) <- c("dept_name", "sex", age_cats)
+
+	dept_deaths_2011$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2011$sex <- rep(sex_labels, length(dept_names))
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+	for (i in dept_names) {
+
+		table_sex_age_2011 <- with(deaths_2011[deaths_2011$COD_DPTO == i, ], table(SEXO, factor(GRU_ED1, levels = levels(deaths_2011$GRU_ED1))))
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2011[1, c(1,2,3,4,5,6,7,8,9)]))
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2011[1, c(1,2,3,4,5,6,7,8,9)]))
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "5"] <- as.numeric(table_sex_age_2011[1, 10])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "5"] <-  as.numeric(table_sex_age_2011[2, 10])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "10"] <- as.numeric(table_sex_age_2011[1, 11])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "10"] <-  as.numeric(table_sex_age_2011[2, 11])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "15"] <- as.numeric(table_sex_age_2011[1, 12])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "15"] <-  as.numeric(table_sex_age_2011[2, 12])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "20"] <- as.numeric(table_sex_age_2011[1, 13])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "20"] <-  as.numeric(table_sex_age_2011[2, 13])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "25"] <- as.numeric(table_sex_age_2011[1, 14])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "25"] <-  as.numeric(table_sex_age_2011[2, 14])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "30"] <- as.numeric(table_sex_age_2011[1, 15])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "30"] <-  as.numeric(table_sex_age_2011[2, 15])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "35"] <- as.numeric(table_sex_age_2011[1, 16])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "35"] <-  as.numeric(table_sex_age_2011[2, 16])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "40"] <- as.numeric(table_sex_age_2011[1, 17])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "40"] <-  as.numeric(table_sex_age_2011[2, 17])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "45"] <- as.numeric(table_sex_age_2011[1, 18])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "45"] <-  as.numeric(table_sex_age_2011[2, 18])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "50"] <- as.numeric(table_sex_age_2011[1, 19])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "50"] <-  as.numeric(table_sex_age_2011[2, 19])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "55"] <- as.numeric(table_sex_age_2011[1, 20])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "55"] <-  as.numeric(table_sex_age_2011[2, 20])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "60"] <- as.numeric(table_sex_age_2011[1, 21])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "60"] <-  as.numeric(table_sex_age_2011[2, 21])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "65"] <- as.numeric(table_sex_age_2011[1, 22])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "65"] <-  as.numeric(table_sex_age_2011[2, 22])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "70"] <- as.numeric(table_sex_age_2011[1, 23])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "70"] <-  as.numeric(table_sex_age_2011[2, 23])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "75"] <- as.numeric(table_sex_age_2011[1, 24])
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "75"] <-  as.numeric(table_sex_age_2011[2, 24])
+
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2011[1, c(25, 26,27,28,29)]))
+		dept_deaths_2011[dept_deaths_2011$dept_name == i & dept_deaths_2011$sex  == "f", "80"] <-  sum(as.numeric(table_sex_age_2011[2, c(25, 26,27,28,29)]))		
+
+
+	}
+
+
+
+
+######################
+### ---- 2012 ---- ###
+######################
+
+
+	deaths_2012 <- read.spss("deaths/microdata/Defun_2012.sav", to.data.frame=TRUE)
+
+
+	# Renaming (removing accents etc) to match the dept_names list (check with: )
+	# dept_names == as.character(sort(unique(deaths_2012$COD_DPTO)))
+	levels(deaths_2012$COD_DPTO)[2] <- 'Atlantico'
+	levels(deaths_2012$COD_DPTO)[3] <- 'Bogota'
+	levels(deaths_2012$COD_DPTO)[4] <- 'Bolivar'
+	levels(deaths_2012$COD_DPTO)[5] <- 'Boyaca'
+	levels(deaths_2012$COD_DPTO)[9] <- 'Cesar'
+	levels(deaths_2012$COD_DPTO)[10] <- 'Cordoba'
+	levels(deaths_2012$COD_DPTO)[12] <- 'Choco'
+	levels(deaths_2012$COD_DPTO)[13] <- 'Huila'
+	levels(deaths_2012$COD_DPTO)[14] <- 'La Guajira'
+	levels(deaths_2012$COD_DPTO)[15] <- 'Magdalena'
+	levels(deaths_2012$COD_DPTO)[16] <- 'Meta'
+	levels(deaths_2012$COD_DPTO)[17] <- 'Narino'
+	levels(deaths_2012$COD_DPTO)[18] <- 'Norte de Santander'
+	levels(deaths_2012$COD_DPTO)[20] <- 'Risaralda'
+	levels(deaths_2012$COD_DPTO)[21] <- 'Santander'
+	levels(deaths_2012$COD_DPTO)[22] <- 'Sucre'
+	levels(deaths_2012$COD_DPTO)[23] <- 'Tolima'
+	levels(deaths_2012$COD_DPTO)[24] <- 'Valle del Cauca'
+	levels(deaths_2012$COD_DPTO)[25] <- 'Arauca'
+	levels(deaths_2012$COD_DPTO)[27] <- 'Putumayo'
+	levels(deaths_2012$COD_DPTO)[28] <- 'San Andres'
+	levels(deaths_2012$COD_DPTO)[29] <- 'Amazonas'
+	levels(deaths_2012$COD_DPTO)[30] <- 'Guainia'
+	levels(deaths_2012$COD_DPTO)[32] <- 'Vaupes'
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2012 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=2+n_age_cats))
+
+	# name the columns and fill the department names and gender
+	colnames(dept_deaths_2012) <- c("dept_name", "sex", age_cats)
+
+	dept_deaths_2012$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2012$sex <- rep(sex_labels, length(dept_names))
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+	for (i in dept_names) {
+
+		table_sex_age_2012 <- with(deaths_2012[deaths_2012$COD_DPTO == i, ], table(SEXO, factor(GRU_ED1, levels = levels(deaths_2012$GRU_ED1))))
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2012[1, c(1,2,3,4,5,6,7,8,9)]))
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2012[1, c(1,2,3,4,5,6,7,8,9)]))
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "5"] <- as.numeric(table_sex_age_2012[1, 10])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "5"] <-  as.numeric(table_sex_age_2012[2, 10])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "10"] <- as.numeric(table_sex_age_2012[1, 11])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "10"] <-  as.numeric(table_sex_age_2012[2, 11])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "15"] <- as.numeric(table_sex_age_2012[1, 12])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "15"] <-  as.numeric(table_sex_age_2012[2, 12])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "20"] <- as.numeric(table_sex_age_2012[1, 13])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "20"] <-  as.numeric(table_sex_age_2012[2, 13])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "25"] <- as.numeric(table_sex_age_2012[1, 14])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "25"] <-  as.numeric(table_sex_age_2012[2, 14])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "30"] <- as.numeric(table_sex_age_2012[1, 15])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "30"] <-  as.numeric(table_sex_age_2012[2, 15])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "35"] <- as.numeric(table_sex_age_2012[1, 16])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "35"] <-  as.numeric(table_sex_age_2012[2, 16])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "40"] <- as.numeric(table_sex_age_2012[1, 17])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "40"] <-  as.numeric(table_sex_age_2012[2, 17])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "45"] <- as.numeric(table_sex_age_2012[1, 18])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "45"] <-  as.numeric(table_sex_age_2012[2, 18])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "50"] <- as.numeric(table_sex_age_2012[1, 19])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "50"] <-  as.numeric(table_sex_age_2012[2, 19])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "55"] <- as.numeric(table_sex_age_2012[1, 20])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "55"] <-  as.numeric(table_sex_age_2012[2, 20])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "60"] <- as.numeric(table_sex_age_2012[1, 21])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "60"] <-  as.numeric(table_sex_age_2012[2, 21])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "65"] <- as.numeric(table_sex_age_2012[1, 22])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "65"] <-  as.numeric(table_sex_age_2012[2, 22])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "70"] <- as.numeric(table_sex_age_2012[1, 23])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "70"] <-  as.numeric(table_sex_age_2012[2, 23])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "75"] <- as.numeric(table_sex_age_2012[1, 24])
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "75"] <-  as.numeric(table_sex_age_2012[2, 24])
+
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2012[1, c(25, 26,27,28,29)]))
+		dept_deaths_2012[dept_deaths_2012$dept_name == i & dept_deaths_2012$sex  == "f", "80"] <-  sum(as.numeric(table_sex_age_2012[2, c(25, 26,27,28,29)]))		
+
+
+	}
+
+
+
+
+######################
+### ---- 2013 ---- ###
+######################
+
+
+	deaths_2013 <- read.spss("deaths/microdata/Defun_2013.sav", to.data.frame=TRUE)
+
+
+	# Renaming (removing accents etc) to match the dept_names list (check with: )
+	# dept_names == as.character(sort(unique(deaths_2013$COD_DPTO)))
+	levels(deaths_2013$COD_DPTO)[2] <- 'Atlantico'
+	levels(deaths_2013$COD_DPTO)[3] <- 'Bogota'
+	levels(deaths_2013$COD_DPTO)[4] <- 'Bolivar'
+	levels(deaths_2013$COD_DPTO)[5] <- 'Boyaca'
+	levels(deaths_2013$COD_DPTO)[9] <- 'Cesar'
+	levels(deaths_2013$COD_DPTO)[10] <- 'Cordoba'
+	levels(deaths_2013$COD_DPTO)[12] <- 'Choco'
+	levels(deaths_2013$COD_DPTO)[13] <- 'Huila'
+	levels(deaths_2013$COD_DPTO)[14] <- 'La Guajira'
+	levels(deaths_2013$COD_DPTO)[15] <- 'Magdalena'
+	levels(deaths_2013$COD_DPTO)[16] <- 'Meta'
+	levels(deaths_2013$COD_DPTO)[17] <- 'Narino'
+	levels(deaths_2013$COD_DPTO)[18] <- 'Norte de Santander'
+	levels(deaths_2013$COD_DPTO)[20] <- 'Risaralda'
+	levels(deaths_2013$COD_DPTO)[21] <- 'Santander'
+	levels(deaths_2013$COD_DPTO)[22] <- 'Sucre'
+	levels(deaths_2013$COD_DPTO)[23] <- 'Tolima'
+	levels(deaths_2013$COD_DPTO)[24] <- 'Valle del Cauca'
+	levels(deaths_2013$COD_DPTO)[25] <- 'Arauca'
+	levels(deaths_2013$COD_DPTO)[27] <- 'Putumayo'
+	levels(deaths_2013$COD_DPTO)[28] <- 'San Andres'
+	levels(deaths_2013$COD_DPTO)[29] <- 'Amazonas'
+	levels(deaths_2013$COD_DPTO)[30] <- 'Guainia'
+	levels(deaths_2013$COD_DPTO)[32] <- 'Vaupes'
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2013 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=2+n_age_cats))
+
+	# name the columns and fill the department names and gender
+	colnames(dept_deaths_2013) <- c("dept_name", "sex", age_cats)
+
+	dept_deaths_2013$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2013$sex <- rep(sex_labels, length(dept_names))
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+	for (i in dept_names) {
+
+		table_sex_age_2013 <- with(deaths_2013[deaths_2013$COD_DPTO == i, ], table(SEXO, factor(GRU_ED1, levels = levels(deaths_2013$GRU_ED1))))
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2013[1, c(1,2,3,4,5,6,7,8,9)]))
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2013[1, c(1,2,3,4,5,6,7,8,9)]))
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "5"] <- as.numeric(table_sex_age_2013[1, 10])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "5"] <-  as.numeric(table_sex_age_2013[2, 10])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "10"] <- as.numeric(table_sex_age_2013[1, 11])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "10"] <-  as.numeric(table_sex_age_2013[2, 11])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "15"] <- as.numeric(table_sex_age_2013[1, 12])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "15"] <-  as.numeric(table_sex_age_2013[2, 12])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "20"] <- as.numeric(table_sex_age_2013[1, 13])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "20"] <-  as.numeric(table_sex_age_2013[2, 13])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "25"] <- as.numeric(table_sex_age_2013[1, 14])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "25"] <-  as.numeric(table_sex_age_2013[2, 14])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "30"] <- as.numeric(table_sex_age_2013[1, 15])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "30"] <-  as.numeric(table_sex_age_2013[2, 15])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "35"] <- as.numeric(table_sex_age_2013[1, 16])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "35"] <-  as.numeric(table_sex_age_2013[2, 16])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "40"] <- as.numeric(table_sex_age_2013[1, 17])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "40"] <-  as.numeric(table_sex_age_2013[2, 17])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "45"] <- as.numeric(table_sex_age_2013[1, 18])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "45"] <-  as.numeric(table_sex_age_2013[2, 18])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "50"] <- as.numeric(table_sex_age_2013[1, 19])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "50"] <-  as.numeric(table_sex_age_2013[2, 19])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "55"] <- as.numeric(table_sex_age_2013[1, 20])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "55"] <-  as.numeric(table_sex_age_2013[2, 20])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "60"] <- as.numeric(table_sex_age_2013[1, 21])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "60"] <-  as.numeric(table_sex_age_2013[2, 21])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "65"] <- as.numeric(table_sex_age_2013[1, 22])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "65"] <-  as.numeric(table_sex_age_2013[2, 22])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "70"] <- as.numeric(table_sex_age_2013[1, 23])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "70"] <-  as.numeric(table_sex_age_2013[2, 23])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "75"] <- as.numeric(table_sex_age_2013[1, 24])
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "75"] <-  as.numeric(table_sex_age_2013[2, 24])
+
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2013[1, c(25,26,27,28,29)]))
+		dept_deaths_2013[dept_deaths_2013$dept_name == i & dept_deaths_2013$sex  == "f", "80"] <- sum(as.numeric(table_sex_age_2013[2, c(25,26,27,28,29)]))		
+
+
+	}
+
+
+
+
+######################
+### ---- 2014 ---- ###
+######################
+
+
+	deaths_2014 <- read.spss("deaths/microdata/Defun_2014.sav", to.data.frame=TRUE)
+
+
+	# Renaming (removing accents etc) to match the dept_names list (check with: )
+	# dept_names == as.character(sort(unique(deaths_2014$cod_dpto)))
+	levels(deaths_2014$cod_dpto)[2] <- 'Atlantico'
+	levels(deaths_2014$cod_dpto)[3] <- 'Bogota'
+	levels(deaths_2014$cod_dpto)[4] <- 'Bolivar'
+	levels(deaths_2014$cod_dpto)[5] <- 'Boyaca'
+	levels(deaths_2014$cod_dpto)[9] <- 'Cesar'
+	levels(deaths_2014$cod_dpto)[10] <- 'Cordoba'
+	levels(deaths_2014$cod_dpto)[12] <- 'Choco'
+	levels(deaths_2014$cod_dpto)[13] <- 'Huila'
+	levels(deaths_2014$cod_dpto)[14] <- 'La Guajira'
+	levels(deaths_2014$cod_dpto)[15] <- 'Magdalena'
+	levels(deaths_2014$cod_dpto)[16] <- 'Meta'
+	levels(deaths_2014$cod_dpto)[17] <- 'Narino'
+	levels(deaths_2014$cod_dpto)[18] <- 'Norte de Santander'
+	levels(deaths_2014$cod_dpto)[20] <- 'Risaralda'
+	levels(deaths_2014$cod_dpto)[21] <- 'Santander'
+	levels(deaths_2014$cod_dpto)[22] <- 'Sucre'
+	levels(deaths_2014$cod_dpto)[23] <- 'Tolima'
+	levels(deaths_2014$cod_dpto)[24] <- 'Valle del Cauca'
+	levels(deaths_2014$cod_dpto)[25] <- 'Arauca'
+	levels(deaths_2014$cod_dpto)[27] <- 'Putumayo'
+	levels(deaths_2014$cod_dpto)[28] <- 'San Andres'
+	levels(deaths_2014$cod_dpto)[29] <- 'Amazonas'
+	levels(deaths_2014$cod_dpto)[30] <- 'Guainia'
+	levels(deaths_2014$cod_dpto)[32] <- 'Vaupes'
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2014 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=2+n_age_cats))
+
+	# name the columns and fill the department names and gender
+	colnames(dept_deaths_2014) <- c("dept_name", "sex", age_cats)
+
+	dept_deaths_2014$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2014$sex <- rep(sex_labels, length(dept_names))
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+	for (i in dept_names) {
+
+		table_sex_age_2014 <- with(deaths_2014[deaths_2014$cod_dpto == i, ], table(sexo, factor(gru_ed1, levels = levels(deaths_2014$gru_ed1))))
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2014[1, c(1,2,3,4,5,6,7,8,9)]))
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2014[1, c(1,2,3,4,5,6,7,8,9)]))
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "5"] <- as.numeric(table_sex_age_2014[1, 10])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "5"] <-  as.numeric(table_sex_age_2014[2, 10])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "10"] <- as.numeric(table_sex_age_2014[1, 11])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "10"] <-  as.numeric(table_sex_age_2014[2, 11])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "15"] <- as.numeric(table_sex_age_2014[1, 12])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "15"] <-  as.numeric(table_sex_age_2014[2, 12])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "20"] <- as.numeric(table_sex_age_2014[1, 13])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "20"] <-  as.numeric(table_sex_age_2014[2, 13])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "25"] <- as.numeric(table_sex_age_2014[1, 14])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "25"] <-  as.numeric(table_sex_age_2014[2, 14])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "30"] <- as.numeric(table_sex_age_2014[1, 15])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "30"] <-  as.numeric(table_sex_age_2014[2, 15])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "35"] <- as.numeric(table_sex_age_2014[1, 16])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "35"] <-  as.numeric(table_sex_age_2014[2, 16])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "40"] <- as.numeric(table_sex_age_2014[1, 17])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "40"] <-  as.numeric(table_sex_age_2014[2, 17])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "45"] <- as.numeric(table_sex_age_2014[1, 18])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "45"] <-  as.numeric(table_sex_age_2014[2, 18])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "50"] <- as.numeric(table_sex_age_2014[1, 19])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "50"] <-  as.numeric(table_sex_age_2014[2, 19])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "55"] <- as.numeric(table_sex_age_2014[1, 20])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "55"] <-  as.numeric(table_sex_age_2014[2, 20])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "60"] <- as.numeric(table_sex_age_2014[1, 21])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "60"] <-  as.numeric(table_sex_age_2014[2, 21])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "65"] <- as.numeric(table_sex_age_2014[1, 22])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "65"] <-  as.numeric(table_sex_age_2014[2, 22])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "70"] <- as.numeric(table_sex_age_2014[1, 23])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "70"] <-  as.numeric(table_sex_age_2014[2, 23])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "75"] <- as.numeric(table_sex_age_2014[1, 24])
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "75"] <-  as.numeric(table_sex_age_2014[2, 24])
+
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2014[1, c(25, 26,27,28,29)]))
+		dept_deaths_2014[dept_deaths_2014$dept_name == i & dept_deaths_2014$sex  == "f", "80"] <-  sum(as.numeric(table_sex_age_2014[2, c(25, 26,27,28,29)]))		
+
+
+	}
+
+
+
+
+
+######################
+### ---- 2015 ---- ###
+######################
+
+
+	deaths_2015 <- read.spss("deaths/microdata/Defun_2015.sav", to.data.frame=TRUE)
+
+
+	# Renaming (removing accents etc) to match the dept_names list (check with: )
+	# dept_names == as.character(sort(unique(deaths_2015$COD_DPTO)))
+	levels(deaths_2015$COD_DPTO)[2] <- 'Atlantico'
+	levels(deaths_2015$COD_DPTO)[3] <- 'Bogota'
+	levels(deaths_2015$COD_DPTO)[4] <- 'Bolivar'
+	levels(deaths_2015$COD_DPTO)[5] <- 'Boyaca'
+	levels(deaths_2015$COD_DPTO)[9] <- 'Cesar'
+	levels(deaths_2015$COD_DPTO)[10] <- 'Cordoba'
+	levels(deaths_2015$COD_DPTO)[12] <- 'Choco'
+	levels(deaths_2015$COD_DPTO)[13] <- 'Huila'
+	levels(deaths_2015$COD_DPTO)[14] <- 'La Guajira'
+	levels(deaths_2015$COD_DPTO)[15] <- 'Magdalena'
+	levels(deaths_2015$COD_DPTO)[16] <- 'Meta'
+	levels(deaths_2015$COD_DPTO)[17] <- 'Narino'
+	levels(deaths_2015$COD_DPTO)[18] <- 'Norte de Santander'
+	levels(deaths_2015$COD_DPTO)[20] <- 'Risaralda'
+	levels(deaths_2015$COD_DPTO)[21] <- 'Santander'
+	levels(deaths_2015$COD_DPTO)[22] <- 'Sucre'
+	levels(deaths_2015$COD_DPTO)[23] <- 'Tolima'
+	levels(deaths_2015$COD_DPTO)[24] <- 'Valle del Cauca'
+	levels(deaths_2015$COD_DPTO)[25] <- 'Arauca'
+	levels(deaths_2015$COD_DPTO)[27] <- 'Putumayo'
+	levels(deaths_2015$COD_DPTO)[28] <- 'San Andres'
+	levels(deaths_2015$COD_DPTO)[29] <- 'Amazonas'
+	levels(deaths_2015$COD_DPTO)[30] <- 'Guainia'
+	levels(deaths_2015$COD_DPTO)[32] <- 'Vaupes'
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2015 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=2+n_age_cats))
+
+	# name the columns and fill the department names and gender
+	colnames(dept_deaths_2015) <- c("dept_name", "sex", age_cats)
+
+	dept_deaths_2015$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2015$sex <- rep(sex_labels, length(dept_names))
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+	for (i in dept_names) {
+
+		table_sex_age_2015 <- with(deaths_2015[deaths_2015$COD_DPTO == i, ], table(SEXO, factor(GRU_ED1, levels = levels(deaths_2015$GRU_ED1))))
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2015[1, c(1,2,3,4,5,6,7,8,9)]))
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2015[1, c(1,2,3,4,5,6,7,8,9)]))
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "5"] <- as.numeric(table_sex_age_2015[1, 10])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "5"] <-  as.numeric(table_sex_age_2015[2, 10])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "10"] <- as.numeric(table_sex_age_2015[1, 11])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "10"] <-  as.numeric(table_sex_age_2015[2, 11])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "15"] <- as.numeric(table_sex_age_2015[1, 12])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "15"] <-  as.numeric(table_sex_age_2015[2, 12])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "20"] <- as.numeric(table_sex_age_2015[1, 13])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "20"] <-  as.numeric(table_sex_age_2015[2, 13])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "25"] <- as.numeric(table_sex_age_2015[1, 14])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "25"] <-  as.numeric(table_sex_age_2015[2, 14])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "30"] <- as.numeric(table_sex_age_2015[1, 15])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "30"] <-  as.numeric(table_sex_age_2015[2, 15])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "35"] <- as.numeric(table_sex_age_2015[1, 16])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "35"] <-  as.numeric(table_sex_age_2015[2, 16])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "40"] <- as.numeric(table_sex_age_2015[1, 17])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "40"] <-  as.numeric(table_sex_age_2015[2, 17])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "45"] <- as.numeric(table_sex_age_2015[1, 18])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "45"] <-  as.numeric(table_sex_age_2015[2, 18])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "50"] <- as.numeric(table_sex_age_2015[1, 19])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "50"] <-  as.numeric(table_sex_age_2015[2, 19])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "55"] <- as.numeric(table_sex_age_2015[1, 20])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "55"] <-  as.numeric(table_sex_age_2015[2, 20])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "60"] <- as.numeric(table_sex_age_2015[1, 21])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "60"] <-  as.numeric(table_sex_age_2015[2, 21])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "65"] <- as.numeric(table_sex_age_2015[1, 22])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "65"] <-  as.numeric(table_sex_age_2015[2, 22])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "70"] <- as.numeric(table_sex_age_2015[1, 23])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "70"] <-  as.numeric(table_sex_age_2015[2, 23])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "75"] <- as.numeric(table_sex_age_2015[1, 24])
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "75"] <-  as.numeric(table_sex_age_2015[2, 24])
+
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2015[1, c(25, 26,27,28,29)]))
+		dept_deaths_2015[dept_deaths_2015$dept_name == i & dept_deaths_2015$sex  == "f", "80"] <-  sum(as.numeric(table_sex_age_2015[2, c(25, 26,27,28,29)]))		
+
+
+	}
+
+
+
+
+
+######################
+### ---- 2016 ---- ###
+######################
+
+
+	deaths_2016 <- read.spss("deaths/microdata/Defun_2016.sav", to.data.frame=TRUE)
+
+
+	# Renaming (removing accents etc) to match the dept_names list (check with: )
+	# dept_names == as.character(sort(unique(deaths_2016$COD_DPTO)))
+	levels(deaths_2016$COD_DPTO)[2] <- 'Atlantico'
+	levels(deaths_2016$COD_DPTO)[3] <- 'Bogota'
+	levels(deaths_2016$COD_DPTO)[4] <- 'Bolivar'
+	levels(deaths_2016$COD_DPTO)[5] <- 'Boyaca'
+	levels(deaths_2016$COD_DPTO)[9] <- 'Cesar'
+	levels(deaths_2016$COD_DPTO)[10] <- 'Cordoba'
+	levels(deaths_2016$COD_DPTO)[12] <- 'Choco'
+	levels(deaths_2016$COD_DPTO)[13] <- 'Huila'
+	levels(deaths_2016$COD_DPTO)[14] <- 'La Guajira'
+	levels(deaths_2016$COD_DPTO)[15] <- 'Magdalena'
+	levels(deaths_2016$COD_DPTO)[16] <- 'Meta'
+	levels(deaths_2016$COD_DPTO)[17] <- 'Narino'
+	levels(deaths_2016$COD_DPTO)[18] <- 'Norte de Santander'
+	levels(deaths_2016$COD_DPTO)[20] <- 'Risaralda'
+	levels(deaths_2016$COD_DPTO)[21] <- 'Santander'
+	levels(deaths_2016$COD_DPTO)[22] <- 'Sucre'
+	levels(deaths_2016$COD_DPTO)[23] <- 'Tolima'
+	levels(deaths_2016$COD_DPTO)[24] <- 'Valle del Cauca'
+	levels(deaths_2016$COD_DPTO)[25] <- 'Arauca'
+	levels(deaths_2016$COD_DPTO)[27] <- 'Putumayo'
+	levels(deaths_2016$COD_DPTO)[28] <- 'San Andres'
+	levels(deaths_2016$COD_DPTO)[29] <- 'Amazonas'
+	levels(deaths_2016$COD_DPTO)[30] <- 'Guainia'
+	levels(deaths_2016$COD_DPTO)[32] <- 'Vaupes'
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2016 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=2+n_age_cats))
+
+	# name the columns and fill the department names and gender
+	colnames(dept_deaths_2016) <- c("dept_name", "sex", age_cats)
+
+	dept_deaths_2016$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2016$sex <- rep(sex_labels, length(dept_names))
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+	for (i in dept_names) {
+
+		table_sex_age_2016 <- with(deaths_2016[deaths_2016$COD_DPTO == i, ], table(SEXO, factor(GRU_ED1, levels = levels(deaths_2016$GRU_ED1))))
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2016[1, c(1,2,3,4,5,6,7,8,9)]))
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2016[1, c(1,2,3,4,5,6,7,8,9)]))
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "5"] <- as.numeric(table_sex_age_2016[1, 10])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "5"] <-  as.numeric(table_sex_age_2016[2, 10])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "10"] <- as.numeric(table_sex_age_2016[1, 11])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "10"] <-  as.numeric(table_sex_age_2016[2, 11])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "15"] <- as.numeric(table_sex_age_2016[1, 12])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "15"] <-  as.numeric(table_sex_age_2016[2, 12])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "20"] <- as.numeric(table_sex_age_2016[1, 13])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "20"] <-  as.numeric(table_sex_age_2016[2, 13])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "25"] <- as.numeric(table_sex_age_2016[1, 14])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "25"] <-  as.numeric(table_sex_age_2016[2, 14])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "30"] <- as.numeric(table_sex_age_2016[1, 15])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "30"] <-  as.numeric(table_sex_age_2016[2, 15])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "35"] <- as.numeric(table_sex_age_2016[1, 16])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "35"] <-  as.numeric(table_sex_age_2016[2, 16])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "40"] <- as.numeric(table_sex_age_2016[1, 17])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "40"] <-  as.numeric(table_sex_age_2016[2, 17])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "45"] <- as.numeric(table_sex_age_2016[1, 18])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "45"] <-  as.numeric(table_sex_age_2016[2, 18])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "50"] <- as.numeric(table_sex_age_2016[1, 19])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "50"] <-  as.numeric(table_sex_age_2016[2, 19])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "55"] <- as.numeric(table_sex_age_2016[1, 20])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "55"] <-  as.numeric(table_sex_age_2016[2, 20])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "60"] <- as.numeric(table_sex_age_2016[1, 21])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "60"] <-  as.numeric(table_sex_age_2016[2, 21])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "65"] <- as.numeric(table_sex_age_2016[1, 22])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "65"] <-  as.numeric(table_sex_age_2016[2, 22])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "70"] <- as.numeric(table_sex_age_2016[1, 23])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "70"] <-  as.numeric(table_sex_age_2016[2, 23])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "75"] <- as.numeric(table_sex_age_2016[1, 24])
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "75"] <-  as.numeric(table_sex_age_2016[2, 24])
+
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2016[1, c(25, 26,27,28,29)]))
+		dept_deaths_2016[dept_deaths_2016$dept_name == i & dept_deaths_2016$sex  == "f", "80"] <-  sum(as.numeric(table_sex_age_2016[2, c(25, 26,27,28,29)]))		
+
+
+	}
+
+
+
+
+
+######################
+### ---- 2017 ---- ###
+######################
+
+
+	deaths_2017 <- read.spss("deaths/microdata/Defun_2017.sav", to.data.frame=TRUE)
+
+
+	# Renaming (removing accents etc) to match the dept_names list (check with: )
+	# dept_names == as.character(sort(unique(deaths_2017$COD_DPTO)))
+	levels(deaths_2017$COD_DPTO)[2] <- 'Atlantico'
+	levels(deaths_2017$COD_DPTO)[3] <- 'Bogota'
+	levels(deaths_2017$COD_DPTO)[4] <- 'Bolivar'
+	levels(deaths_2017$COD_DPTO)[5] <- 'Boyaca'
+	levels(deaths_2017$COD_DPTO)[9] <- 'Cesar'
+	levels(deaths_2017$COD_DPTO)[10] <- 'Cordoba'
+	levels(deaths_2017$COD_DPTO)[12] <- 'Choco'
+	levels(deaths_2017$COD_DPTO)[13] <- 'Huila'
+	levels(deaths_2017$COD_DPTO)[14] <- 'La Guajira'
+	levels(deaths_2017$COD_DPTO)[15] <- 'Magdalena'
+	levels(deaths_2017$COD_DPTO)[16] <- 'Meta'
+	levels(deaths_2017$COD_DPTO)[17] <- 'Narino'
+	levels(deaths_2017$COD_DPTO)[18] <- 'Norte de Santander'
+	levels(deaths_2017$COD_DPTO)[20] <- 'Risaralda'
+	levels(deaths_2017$COD_DPTO)[21] <- 'Santander'
+	levels(deaths_2017$COD_DPTO)[22] <- 'Sucre'
+	levels(deaths_2017$COD_DPTO)[23] <- 'Tolima'
+	levels(deaths_2017$COD_DPTO)[24] <- 'Valle del Cauca'
+	levels(deaths_2017$COD_DPTO)[25] <- 'Arauca'
+	levels(deaths_2017$COD_DPTO)[27] <- 'Putumayo'
+	levels(deaths_2017$COD_DPTO)[28] <- 'San sex_labelsAndres'
+	levels(deaths_2017$COD_DPTO)[29] <- 'Amazonas'
+	levels(deaths_2017$COD_DPTO)[30] <- 'Guainia'
+	levels(deaths_2017$COD_DPTO)[32] <- 'Vaupes'
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2017 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=2+n_age_cats))
+
+	# name the columns and fill the department names and gender
+	colnames(dept_deaths_2017) <- c("dept_name", "sex", age_cats)
+
+	dept_deaths_2017$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2017$sex <- rep(sex_labels, length(dept_names))
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+	for (i in dept_names) {
+
+		table_sex_age_2017 <- with(deaths_2017[deaths_2017$COD_DPTO == i, ], table(SEXO, factor(GRU_ED1, levels = levels(deaths_2017$GRU_ED1))))
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2017[1, c(1,2,3,4,5,6,7,8,9)]))
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2017[1, c(1,2,3,4,5,6,7,8,9)]))
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "5"] <- as.numeric(table_sex_age_2017[1, 10])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "5"] <-  as.numeric(table_sex_age_2017[2, 10])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "10"] <- as.numeric(table_sex_age_2017[1, 11])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "10"] <-  as.numeric(table_sex_age_2017[2, 11])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "15"] <- as.numeric(table_sex_age_2017[1, 12])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "15"] <-  as.numeric(table_sex_age_2017[2, 12])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "20"] <- as.numeric(table_sex_age_2017[1, 13])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "20"] <-  as.numeric(table_sex_age_2017[2, 13])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "25"] <- as.numeric(table_sex_age_2017[1, 14])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "25"] <-  as.numeric(table_sex_age_2017[2, 14])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "30"] <- as.numeric(table_sex_age_2017[1, 15])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "30"] <-  as.numeric(table_sex_age_2017[2, 15])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "35"] <- as.numeric(table_sex_age_2017[1, 16])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "35"] <-  as.numeric(table_sex_age_2017[2, 16])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "40"] <- as.numeric(table_sex_age_2017[1, 17])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "40"] <-  as.numeric(table_sex_age_2017[2, 17])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "45"] <- as.numeric(table_sex_age_2017[1, 18])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "45"] <-  as.numeric(table_sex_age_2017[2, 18])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "50"] <- as.numeric(table_sex_age_2017[1, 19])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "50"] <-  as.numeric(table_sex_age_2017[2, 19])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "55"] <- as.numeric(table_sex_age_2017[1, 20])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "55"] <-  as.numeric(table_sex_age_2017[2, 20])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "60"] <- as.numeric(table_sex_age_2017[1, 21])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "60"] <-  as.numeric(table_sex_age_2017[2, 21])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "65"] <- as.numeric(table_sex_age_2017[1, 22])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "65"] <-  as.numeric(table_sex_age_2017[2, 22])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "70"] <- as.numeric(table_sex_age_2017[1, 23])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "70"] <-  as.numeric(table_sex_age_2017[2, 23])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "75"] <- as.numeric(table_sex_age_2017[1, 24])
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "75"] <-  as.numeric(table_sex_age_2017[2, 24])
+
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2017[1, c(25, 26,27,28,29)]))
+		dept_deaths_2017[dept_deaths_2017$dept_name == i & dept_deaths_2017$sex  == "f", "80"] <-  sum(as.numeric(table_sex_age_2017[2, c(25, 26,27,28,29)]))		
+
+
+	}
+
+
+
+
+
+######################
+### ---- 2018 ---- ###
+######################
+
+
+	deaths_2018 <- read.spss("deaths/microdata/Defun_2018.sav", to.data.frame=TRUE)
+
+
+	# Renaming (removing accents etc) to match the dept_names list (check with: )
+	# dept_names == as.character(sort(unique(deaths_2018$COD_DPTO)))
+	levels(deaths_2018$COD_DPTO)[2] <- 'Atlantico'
+	levels(deaths_2018$COD_DPTO)[3] <- 'Bogota'
+	levels(deaths_2018$COD_DPTO)[14] <- 'La Guajira'
+	levels(deaths_2018$COD_DPTO)[17] <- 'Narino'
+	levels(deaths_2018$COD_DPTO)[28] <- 'San Andres'
+	levels(deaths_2018$COD_DPTO)[30] <- 'Guainia'
+	levels(deaths_2018$COD_DPTO)[32] <- 'Vaupes'
+
+	# empty matrix that will summarize the deaths per gender and department
+	dept_deaths_2018 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=2+n_age_cats))
+
+	# name the columns and fill the department names and gender
+	colnames(dept_deaths_2018) <- c("dept_name", "sex", age_cats)
+
+	dept_deaths_2018$dept_name <- rep(dept_names, each = n_sex)
+	dept_deaths_2018$sex <- rep(sex_labels, length(dept_names))
+
+
+	# summing the ages 0-5 / assigning gender counts to the year matrix
+	for (i in dept_names) {
+
+		table_sex_age_2018 <- with(deaths_2018[deaths_2018$COD_DPTO == i, ], table(SEXO, factor(GRU_ED1, levels = levels(deaths_2018$GRU_ED1))))
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "0"] <- sum(as.numeric(table_sex_age_2018[1, c(1,2,3,4,5,6,7,8,9)]))
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "0"] <- sum(as.numeric(table_sex_age_2018[1, c(1,2,3,4,5,6,7,8,9)]))
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "5"] <- as.numeric(table_sex_age_2018[1, 10])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "5"] <-  as.numeric(table_sex_age_2018[2, 10])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "10"] <- as.numeric(table_sex_age_2018[1, 11])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "10"] <-  as.numeric(table_sex_age_2018[2, 11])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "15"] <- as.numeric(table_sex_age_2018[1, 12])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "15"] <-  as.numeric(table_sex_age_2018[2, 12])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "20"] <- as.numeric(table_sex_age_2018[1, 13])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "20"] <-  as.numeric(table_sex_age_2018[2, 13])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "25"] <- as.numeric(table_sex_age_2018[1, 14])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "25"] <-  as.numeric(table_sex_age_2018[2, 14])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "30"] <- as.numeric(table_sex_age_2018[1, 15])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "30"] <-  as.numeric(table_sex_age_2018[2, 15])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "35"] <- as.numeric(table_sex_age_2018[1, 16])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "35"] <-  as.numeric(table_sex_age_2018[2, 16])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "40"] <- as.numeric(table_sex_age_2018[1, 17])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "40"] <-  as.numeric(table_sex_age_2018[2, 17])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "45"] <- as.numeric(table_sex_age_2018[1, 18])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "45"] <-  as.numeric(table_sex_age_2018[2, 18])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "50"] <- as.numeric(table_sex_age_2018[1, 19])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "50"] <-  as.numeric(table_sex_age_2018[2, 19])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "55"] <- as.numeric(table_sex_age_2018[1, 20])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "55"] <-  as.numeric(table_sex_age_2018[2, 20])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "60"] <- as.numeric(table_sex_age_2018[1, 21])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "60"] <-  as.numeric(table_sex_age_2018[2, 21])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "65"] <- as.numeric(table_sex_age_2018[1, 22])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "65"] <-  as.numeric(table_sex_age_2018[2, 22])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "70"] <- as.numeric(table_sex_age_2018[1, 23])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "70"] <-  as.numeric(table_sex_age_2018[2, 23])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "75"] <- as.numeric(table_sex_age_2018[1, 24])
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "75"] <-  as.numeric(table_sex_age_2018[2, 24])
+
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "m", "80"] <- sum(as.numeric(table_sex_age_2018[1, c(25, 26,27,28,29)]))
+		dept_deaths_2018[dept_deaths_2018$dept_name == i & dept_deaths_2018$sex  == "f", "80"] <-  sum(as.numeric(table_sex_age_2018[2, c(25,26,27,28,29)]))		
+
+
+	}
+
+
+###############################
+# populating deaths in ddm df #
+###############################
+
+# loops through the dept_death_20xx tables and sums the values per dept, sex and age category
+	for (i in dept_names) {
+
+		for (j in sex_labels){
+
+			for (k in age_cats){
+
+				df_for_ddm[df_for_ddm$dept_name == i & df_for_ddm$sex == j & df_for_ddm$age == k, "deaths"] <- dept_deaths_2005[dept_deaths_2005$dept_name == as.character(i) & dept_deaths_2005$sex == as.character(j), as.character(k)] +
+																											   dept_deaths_2006[dept_deaths_2006$dept_name == as.character(i) & dept_deaths_2006$sex == as.character(j), as.character(k)] +	
+																											   dept_deaths_2007[dept_deaths_2007$dept_name == as.character(i) & dept_deaths_2007$sex == as.character(j), as.character(k)] +	
+																											   dept_deaths_2008[dept_deaths_2008$dept_name == as.character(i) & dept_deaths_2008$sex == as.character(j), as.character(k)] +	
+																											   dept_deaths_2009[dept_deaths_2009$dept_name == as.character(i) & dept_deaths_2009$sex == as.character(j), as.character(k)] +	
+																											   dept_deaths_2010[dept_deaths_2010$dept_name == as.character(i) & dept_deaths_2010$sex == as.character(j), as.character(k)] +	
+																											   dept_deaths_2011[dept_deaths_2011$dept_name == as.character(i) & dept_deaths_2011$sex == as.character(j), as.character(k)] +	
+																											   dept_deaths_2012[dept_deaths_2012$dept_name == as.character(i) & dept_deaths_2012$sex == as.character(j), as.character(k)] +	
+																											   dept_deaths_2013[dept_deaths_2013$dept_name == as.character(i) & dept_deaths_2013$sex == as.character(j), as.character(k)] +	
+																											   dept_deaths_2014[dept_deaths_2014$dept_name == as.character(i) & dept_deaths_2014$sex == as.character(j), as.character(k)] +	
+																											   dept_deaths_2015[dept_deaths_2015$dept_name == as.character(i) & dept_deaths_2015$sex == as.character(j), as.character(k)] +	
+																											   dept_deaths_2016[dept_deaths_2016$dept_name == as.character(i) & dept_deaths_2016$sex == as.character(j), as.character(k)] +	
+																											   dept_deaths_2017[dept_deaths_2017$dept_name == as.character(i) & dept_deaths_2017$sex == as.character(j), as.character(k)] +	
+																											   dept_deaths_2018[dept_deaths_2018$dept_name == as.character(i) & dept_deaths_2018$sex == as.character(j), as.character(k)]
+			}
+		}
+	}
+
+
+
+
+
+##############################################
+#### 2005 CENSUS REGISTRY DATA EXTRACTION ####
+##############################################
+
+	# extracting 2005 census data
+	dept_births_2005 <- read_csv("census/2005/redatam_census2005_age5yr_sex_dept.csv")
+
+
+	# populating 2005 births in ddm df
+		# cycling through the summary table recording births per age category, gender and dept in 2005 - multiplying by 10 bc of IPUMS sampling
+		for (i in dept_codes2) {
+
+			for (j in sex_labels){
+
+				for (k in age_cats){
+
+					df_for_ddm[df_for_ddm$dept_code2 == i & df_for_ddm$sex == j & df_for_ddm$age == k, "pop1"] <- dept_births_2005[dept_births_2005$dept_code2 == i & dept_births_2005$sex == j, as.character(k)]
+
+				}
+			}
+		}
+
+
+
+
+##############################################
+#### 2018 CENSUS REGISTRY DATA EXTRACTION ####
+##############################################
+
+
+	# extracting the dept census data
+	for(i in dept_codes2_2018_census) {
+
+		url <- paste0("census/2018/", i, "_PERS.CSV")
+		 
+		dept_i_census_2018 <- read_csv(url)
+
+		dept_i_census_2018 <- dept_i_census_2018 %>% select(dept_code2 = "U_DPTO", sex = "P_SEXO", age_cat = "P_EDAD") %>%
+								mutate(sex=replace(sex, sex == 1, 'm'), sex=replace(sex, sex == 2, 'f')) %>%
+								mutate(age_cat = replace(age_cat, age_cat == 1, 0), 
+									   age_cat = replace(age_cat, age_cat == 6, 25),
+									   age_cat = replace(age_cat, age_cat == 7, 30),
+									   age_cat = replace(age_cat, age_cat == 8, 35),
+									   age_cat = replace(age_cat, age_cat == 9, 40),
+									   age_cat = replace(age_cat, age_cat == 10, 45),
+									   age_cat = replace(age_cat, age_cat == 11, 50),
+									   age_cat = replace(age_cat, age_cat == 12, 55),
+									   age_cat = replace(age_cat, age_cat == 13, 60),
+									   age_cat = replace(age_cat, age_cat == 14, 65),
+									   age_cat = replace(age_cat, age_cat == 15, 70),
+									   age_cat = replace(age_cat, age_cat == 16, 75),
+									   age_cat = replace(age_cat, age_cat == 17, 80),
+									   age_cat = replace(age_cat, age_cat == 18, 80),
+									   age_cat = replace(age_cat, age_cat == 19, 80),
+									   age_cat = replace(age_cat, age_cat == 20, 80),
+									   age_cat = replace(age_cat, age_cat == 21, 80),
+									   age_cat = replace(age_cat, age_cat == 5, 20),												
+									   age_cat = replace(age_cat, age_cat == 2, 5),
+									   age_cat = replace(age_cat, age_cat == 3, 10),
+									   age_cat = replace(age_cat, age_cat == 4, 15))
+
+		# empty matrix that will summarize the 2018 births per gender and department
+		dept_births_2018 <- as.data.frame(matrix(NA, nrow=length(dept_names) * n_sex, ncol=2+n_age_cats))
+
+		# name the columns and fill the department codes2 and gender labels in the 2018 summary matrix
+		colnames(dept_births_2018) <- c("dept_code2", "sex", age_cats)
+		dept_births_2018$dept_code2 <- rep(dept_codes2, each = n_sex)
+		dept_births_2018$sex <- rep(sex_labels, length(dept_names))
+
+		
+		
+		
+		####################################
+		# populating 2018 births in ddm df #
+		####################################
+		
+		table_sex_age_2018_dept_i <- with(dept_i_census_2018, table(sex, factor(age_cat, levels = age_cats)))
+		for(j in sex_labels){
+
+			for (k in age_cats){
+			  
+				df_for_ddm[df_for_ddm$dept_code2 == as.double(i) & df_for_ddm$sex == j & df_for_ddm$age == k, "pop2"] <- table_sex_age_2018_dept_i[j, as.character(k)]
+
+			}
+		}
+	}
+
+
+
+
+
+
+################################
+#### COLLATING AMAZON DEPTS ####
+################################
+
+
+	# Amazonas (91), Guaviare (95), Guainia (94), Vaupés (97), and Vichada (99) are combined/"regionalized" into
+	# Guaviare (95) in IPUMS 2005 "for confidentiality reasons" and to have a unit greater than 20 000 people.
+
+	# initializing regionalized departments to consolidate
+
+	trip <- c("pop1", "pop2", "deaths")
+
+		for(j in sex_labels){
+
+			for (k in age_cats){
+
+				for(l in trip){
+				
+				df_for_ddm[df_for_ddm$dept_code2 == 95 & df_for_ddm$sex == j & df_for_ddm$age == k, l] <- sum(df_for_ddm[df_for_ddm$dept_code2 == 91 & df_for_ddm$sex == j & df_for_ddm$age == k, l],
+																												  df_for_ddm[df_for_ddm$dept_code2 == 94 & df_for_ddm$sex == j & df_for_ddm$age == k, l],
+																												  df_for_ddm[df_for_ddm$dept_code2 == 95 & df_for_ddm$sex == j & df_for_ddm$age == k, l],
+																												  df_for_ddm[df_for_ddm$dept_code2 == 97 & df_for_ddm$sex == j & df_for_ddm$age == k, l],
+																												  df_for_ddm[df_for_ddm$dept_code2 == 99 & df_for_ddm$sex == j & df_for_ddm$age == k, l],
+																												  na.rm=T)
+				}
+			}
+		}
+
+	# dropping rows of regionalized depts
+	df_for_ddm <- df_for_ddm %>% filter(!dept_code2 %in% c(91, 94, 97, 99))
+
+
+
+
+
+
+
+#########################
+#### saves dataframe ####
+#########################
+
+	write.csv(df_for_ddm, file="df_for_ddm.csv", row.names=FALSE)
+
+###########################################
+#### Completeness Results and Analysis ####
+###########################################
+
+	# set a plot directory in getwd()
+	my_plots_dir <- "Plots/Dept_15_80/"
+
+
+
+	# getting dept estimates
+	# reshape data for the package 
+		data_colombia <- df_for_ddm %>% select(dept_name, sex, age, pop1, pop2, deaths, date1, date2) %>%
+										mutate(age = as.integer(age), pop1 = as.integer(pop1), deaths = as.integer(deaths))
+
+	
+
+	# ## to get the national estimate:
+
+	# 	# building a matrix with summed numbers
+	#     nat_data <- as.data.frame(matrix(NA, nrow = n_sex * n_age_cats, ncol = 8))
+	#     colnames(nat_data) <- c("dept_name", "sex", "age", "pop1", "pop2", "deaths", "date1", "date2")
+	#     nat_data$dept_name <- "National"
+	#     nat_data$sex <- rep(c("m", "f"), each = n_age_cats)
+	#     nat_data$age <- rep(age_cats, 2)
+	#     nat_data$date1 <- as.character(date1)
+	#     nat_data$date2 <-  as.character(date2)
+	#     for(i in sex_labels){
+	#         for(j in age_cats){
+	#             nat_data[nat_data$sex == i & nat_data$age == j,"pop1"] = sum(data_colombia[data_colombia$sex == i & data_colombia$age == j, "pop1"])
+	#             nat_data[nat_data$sex == i & nat_data$age == j,"pop2"] = sum(data_colombia[data_colombia$sex == i & data_colombia$age == j, "pop2"])
+	#             nat_data[nat_data$sex == i & nat_data$age == j,"deaths"] = sum(data_colombia[data_colombia$sex == i & data_colombia$age == j, "deaths"])
+	#         }
+	#       }
+
+
+	#     ### (this requires the dept section above to have run first)
+	# 	data_colombia <- nat_data			
+
+
+
+	# sex ratios
+
+		c_s <- ComputeSexRatios(data=as.data.frame(data_colombia),
+	               name.disaggregations="dept_name",
+	               name.males="m",
+	               name.females="f",
+	               name.age="age",
+	               name.sex="sex",
+	               name.date1="date1",
+	               name.date2="date2",
+	               name.population.year1="pop1",
+	               name.population.year2="pop2")
+
+		s <- PlotSexRatios(data=as.data.frame(data_colombia),
+	                   name.disaggregations="dept_name",
+	                   name.males="m",
+	                   name.females="f",
+	                   name.age="age",
+	                   name.sex="sex",
+	                   name.date1="date1",
+	                   name.date2="date2",
+	                   name.population.year1="pop1",
+	                   name.population.year2="pop2",
+	                   line.size.overall=0.6,
+	                   print.disaggregated=FALSE,
+	                   print.overall=FALSE,
+	                   plots.dir = my_plots_dir)
+
+
+
+		# # sex ratios as table
+		# s %>% select(dept_name, age, pop1, pop2, sex_ratio_1, sex_ratio_2) %>% head()
+		# write.csv(c_s, file="sex_ratios_dept_15_80.csv", row.names=FALSE)
+
+	# age ratios
+	a <- PlotAgeRatios(data=as.data.frame(data_colombia),
+	              name.disaggregations="dept_name",
+	              name.males="m",
+	              name.females="f",
+	              name.age="age",
+	              name.sex="sex",
+	              name.date1="date1",
+	              name.date2="date2",
+	              name.population.year1="pop1",
+	              name.population.year2="pop2",
+	              line.size.overall=0.6,
+	              print.disaggregated=FALSE,
+	              print.overall=FALSE,
+	              plots.dir=my_plots_dir)
+
+		# age ratios as table
+		a %>% select(dept_name, age, pop1, pop2, sex_ratio_1, sex_ratio_2) %>% head()
+		write.csv(a, file="age_ratios_dept_15_80.csv", row.names=FALSE)
+
+	# checking for age heaping
+	ah <- PlotPotentialAgeHeaping(data=as.data.frame(data_colombia),
+	            name.disaggregations="dept_name",
+	              name.males="m",
+	              name.females="f",
+	              name.age="age",
+	              name.sex="sex",
+	              name.date1="date1",
+	              name.date2="date2",
+	              name.population.year1="pop1",
+	              name.population.year2="pop2",
+	              print.disaggregated=FALSE,
+	              print.overall=FALSE,
+	              plots.dir=my_plots_dir)
+
+
+
+
+
+	# Deploying the DDM function
+
+		ddm_results <- EstimateDDM(data=as.data.frame(data_colombia), 
+		            name.disaggregations="dept_name",
+		            name.age="age",
+		            name.sex="sex",
+		            name.males="m",
+		            name.females="f",
+		            name.date1="date1",
+		            name.date2="date2",
+		            name.population.year1="pop1",
+		            name.population.year2="pop2",
+		            name.deaths="deaths",
+		            deaths.summed=TRUE,
+		            min.age.in.search=15,
+		            max.age.in.search=80,
+		            min.number.of.ages=8,
+		            show.age.range.sensitivity=TRUE)
+
+	# # ddm estimates
+	ddm_results$ddm_estimates
+
+	# ddm sensitivity analysis
+	ddm_results$sensitivity_ddm_estimates
+
+	# plot completeness
+	PlotDDM(ddm_results=ddm_results,
+	        size.text.sensitivity=8,
+	        plots.dir=my_plots_dir)
+
+
+
+
+#############################
+#### saves DDM estimates ####
+#############################
+	
+	# write.csv(ddm_results$ddm_estimates, file="ddm_estimates_dept_15_80.csv", row.names=FALSE)
+
+
+```
